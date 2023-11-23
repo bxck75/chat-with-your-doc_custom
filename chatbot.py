@@ -174,7 +174,7 @@ class DocChatbot:
             ),
             Tool.from_function(
                 name="Painter",
-                func=text2image,
+                func=tself.ext2image,
                 description=
                 '''Useful for when you want to compliment your response with images. 
                     The inputs are:

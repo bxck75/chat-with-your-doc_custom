@@ -36,7 +36,7 @@ with st.sidebar:
                             f.write(uploaded_file.getbuffer())
                             f.close()
 
-                        docChatBot.init_vector_db_from_documents([local_file_name])
+                        docChatBot.init_vector_db_from_documents(file_list=[local_file_name])
                 else:
                     docChatBot.load_vector_db_from_local("./data/vector_store", selected_index)
 
