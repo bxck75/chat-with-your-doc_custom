@@ -6,7 +6,7 @@ from datetime import datetime
 
 docChatBot = DocChatbot()
 available_indexes = docChatBot.get_available_indexes("./data/vector_store")
-
+path='chat-with-your-doc_custom/chroma_db'
 # Add an option for "Uploaded File"
 index_options = ["-- Existing Vector Stores --"] + available_indexes
 
@@ -36,7 +36,7 @@ with st.sidebar:
                             f.write(uploaded_file.getbuffer())
                             f.close()
 
-                        docChatBot.init_vector_db_from_documents(file_list=[local_file_name])
+                        docChatBot.init_vector_db_from_documents(path=path, file_list=[local_file_name])
                 else:
                     docChatBot.load_vector_db_from_local("./data/vector_store", selected_index)
 
