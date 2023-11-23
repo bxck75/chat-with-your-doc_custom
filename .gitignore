@@ -8,3 +8,4 @@ data/archive/*
 *.code-workspace
 *.DS_STORE
 credits
+myenv
