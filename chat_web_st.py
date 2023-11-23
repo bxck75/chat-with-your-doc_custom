@@ -18,7 +18,7 @@ with st.sidebar:
         # Dropdown for selecting an index or uploaded file
         selected_index = st.selectbox('Select an existing vector store or upload a file to create one, then press Process button', index_options)
 
-        uploaded_file = st.file_uploader("Upload documents", type=["pdf", "md", "txt", "docx", ".csv", ".xml"])
+        uploaded_file = st.file_uploader("Upload documents", type=["pdf", "md", "txt", "docx", ".csv", ".xml",".py"])
         submitted = st.form_submit_button("Process")
 
         if submitted:
@@ -26,7 +26,7 @@ with st.sidebar:
                 if selected_index == "-- Existing Vector Stores --":
                     if uploaded_file:
                         ext_name = os.path.splitext(uploaded_file.name)[-1]
-                        if ext_name not in [".pdf", ".md", ".txt", ".docx", ".csv", ".xml"]:
+                        if ext_name not in [".pdf", ".md", ".txt", ".docx", ".csv", ".xml",".py"]:
                             st.error("Unsupported file type.")
                             st.stop()
                         # Save the uploaded file to local

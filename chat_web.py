@@ -34,6 +34,7 @@ def get_vs_list():
 
     return index_list
 
+
 def select_vs_on_change(vs_id):
     switch_kb(vs_id)
     return [[None, init_message]]
@@ -57,7 +58,7 @@ def ingest_docs_to_vector_store(vs_name, files, vs_list, select_vs):
             shutil.move(file.name, UPLOAD_ROOT_PATH + filename)
             file_list.append(UPLOAD_ROOT_PATH + filename)
 
-    
+
     # create new kb and ingest data to vector store   
     docChatbot.init_vector_db_from_documents(file_list)
     docChatbot.save_vector_db_to_local(VS_ROOT_PATH, vs_name)
