@@ -8,4 +8,6 @@ data/archive/*
 *.code-workspace
 *.DS_STORE
 credits
-myenv
+myenv/*
+.streamlit
+Test_Coder/chat-with-your-doc_custom/__pycache__

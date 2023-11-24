@@ -6,7 +6,7 @@ from datetime import datetime
 
 docChatBot = DocChatbot()
 available_indexes = docChatBot.get_available_indexes("./data/vector_store")
-path='chat-with-your-doc_custom/chroma_db'
+
 # Add an option for "Uploaded File"
 index_options = ["-- Existing Vector Stores --"] + available_indexes
 
@@ -26,7 +26,7 @@ with st.sidebar:
                 if selected_index == "-- Existing Vector Stores --":
                     if uploaded_file:
                         ext_name = os.path.splitext(uploaded_file.name)[-1]
-                        if ext_name not in [".pdf", ".md", ".txt", ".docx", ".csv", ".xml",".py"]:
+                        if ext_name not in [".pdf", ".md", ".txt", ".docx", ".csv", ".xml",".py","md","html"]:
                             st.error("Unsupported file type.")
                             st.stop()
                         # Save the uploaded file to local
@@ -36,7 +36,7 @@ with st.sidebar:
                             f.write(uploaded_file.getbuffer())
                             f.close()
 
-                        docChatBot.init_vector_db_from_documents(path=path, file_list=[local_file_name])
+                        docChatBot.init_vector_db_from_documents(file_list=[local_file_name])
                 else:
                     docChatBot.load_vector_db_from_local("./data/vector_store", selected_index)
 
@@ -50,7 +50,7 @@ with st.sidebar:
                 st.stop()
                 
     with st.container():
-        "[Github Repo Link](https://github.com/linjungz/chat-with-your-doc)"
+        "[Github Repo Link](https://github.com/bxck75/chat-with-your-doc_custom)"
 
 if 'messages' in st.session_state:
     for msg in st.session_state.messages:
@@ -71,10 +71,11 @@ if user_input := st.chat_input():
         answer_container = st.empty()
         
         docChatBot = st.session_state['docChatBot']
-        docChatBot.init_streaming(condense_question_container, answer_container)
+        #docChatBot.init_streaming(condense_question_container, answer_container)
         docChatBot.init_chatchain()
             
         result_answer, result_source = docChatBot.get_answer(
+            
             user_input, 
             st.session_state.messages)
         

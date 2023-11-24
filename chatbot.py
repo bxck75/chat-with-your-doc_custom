@@ -6,7 +6,7 @@ from langchain.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.chains.conversational_retrieval.base import BaseConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
-from langchain.document_loaders import (UnstructuredPowerPointLoader, UnstructuredWordDocumentLoader, PyPDFLoader, UnstructuredFileLoader,PythonLoader, CSVLoader, MWDumpLoader)
+from langchain.document_loaders import (UnstructuredMarkdownLoader, BSHTMLLoader, UnstructuredPowerPointLoader, UnstructuredWordDocumentLoader, PyPDFLoader, UnstructuredFileLoader,PythonLoader, CSVLoader, MWDumpLoader)
 import langchain.text_splitter as text_splitter
 from langchain.text_splitter import (RecursiveCharacterTextSplitter, CharacterTextSplitter)
 
@@ -116,10 +116,9 @@ class DocChatbot:
     '''  
 
     llm: HuggingFaceHub
-    condense_question_llm: HuggingFaceHub
     tools: List[Tool]
     embeddings: HuggingFaceEmbeddings
-    vector_db: Chroma
+    vector_db: FAISS
     chunk_size = int
     chunk_overlap = int
     chatchain: BaseConversationalRetrievalChain
@@ -129,23 +128,45 @@ class DocChatbot:
     api_key : str
 
     def __init__(self) -> None:
-        self.embeddings= HuggingFaceEmbeddings()
+        self.embeddings= HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         self.chunk_size = 512
         self.temperature = 0.1
         self.chunk_overlap = 8 
         self.request_timeout =30 
         self.max_new_tokens = 500
-        self.llm = HuggingFaceHub(
-            repo_id="tiiuae/falcon-7b-instruct",
-            model_kwargs={
-                "temperature": 
-                self.temperature ,
-                "max_new_tokens": 
-                self.max_new_tokens
-                }
-            )
         
-    @tool('Painter')
+        self.llm = HuggingFaceHub( huggingfacehub_api_token=HUGGINGFACE_TOKEN,repo_id="tiiuae/falcon-7b-instruct", model_kwargs={ "temperature": self.temperature ,"max_new_tokens": self.max_new_tokens })
+        self.embeddings= HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+ 
+        # tools
+        self.tools=[
+            Tool.from_function(
+                name="Search",
+                func=SerpAPIWrapper(serpapi_api_key=SERPAPI_API_KEY).run,
+                description="Useful for searching online and enhancing your response. Input is your question",
+            ),
+            Tool.from_function(
+                name="Painter",
+                func=self.text2image,
+                description=
+                '''Useful for when you want to compliment your response with images. 
+                    The inputs are:
+                    (1) a detailed description of the image 
+                    (2) a filename so it can be stored''',
+                return_direct=False, 
+            ),
+            Tool.from_function(
+                name="Speak",
+                func=tts.stream_speech,
+                description="Useful for when you want to enhance your response with your voice",
+                return_direct=False,   
+            ),
+        ]
+        self.tools.append(self.text2image)
+        # list of tool names
+        self.tool_names = [tool.name for tool in self.tools]  
+
+    @tool('text2image')
     def text2image(prompt, file):
         """
         Convert a text prompt into an image and save it to a specified file.
@@ -165,34 +186,6 @@ class DocChatbot:
         image = client.text_to_image(prompt)
         image.save(file)
             
-        # tools
-        self.tools=[
-            Tool.from_function(
-                name="Search",
-                func=SerpAPIWrapper(serpapi_api_key=SERPAPI_API_KEY).run,
-                description="Useful for searching online and enhancing your response. Input is your question",
-            ),
-            Tool.from_function(
-                name="Painter",
-                func=tself.ext2image,
-                description=
-                '''Useful for when you want to compliment your response with images. 
-                    The inputs are:
-                    (1) a detailed description of the image 
-                    (2) a filename so it can be stored''',
-                return_direct=False, 
-            ),
-            Tool.from_function(
-                name="Speak",
-                func=tts.stream_speech,
-                description="Useful for when you want to enhance your response with your voice",
-                return_direct=False,   
-            ),
-        ]
-        self.tools.append(self.Text2ImageTool(text2image))
-        # list of tool names
-        self.tool_names = [tool.name for tool in self.tools]  
-
     def init_chatchain(self, chain_type : str = "stuff") -> None:
         #ConversationalRetrievalChain prompt
         CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template("""
@@ -218,7 +211,6 @@ class DocChatbot:
             llm=self.llm,
             retriever=self.vector_db.as_retriever(),
             condense_question_prompt=CONDENSE_QUESTION_PROMPT,
-            condense_question_llm=self.condense_question_llm,
             chain_type=chain_type,
             return_source_documents=True,
             verbose=True,
@@ -226,47 +218,55 @@ class DocChatbot:
         )
 
     # get answer and source documents from query, 
-    def get_answer_with_source(self, query, chat_history):
-        result = self.chatchain({ "question": query,"chat_history": chat_history },return_only_outputs=True)
+    def get_answer_with_source(self, tool_names, query, chat_history):
+        result = self.chatchain({   "tool_names":self.tool_names, 
+                                    "question": query, 
+                                    "chat_history": chat_history
+                            },return_only_outputs=True)
         return result['answer'], result['source_documents']
 
     # get answer from query. 
-    def get_answer(self, query, chat_history):
+    def get_answer(self, tool_names, query, chat_history):
         chat_history_for_chain = []
+        
         for i in range(0, len(chat_history), 2):
             chat_history_for_chain.append(( chat_history[i]['content'], chat_history[i+1]['content'] 
                     if chat_history[i+1] is not None else "" )
             )
-        result = self.chatchain( {"question": query,"chat_history": chat_history_for_chain }, return_only_outputs=True)
+        result = self.chatchain({"tool_names":self.tool_names, 
+                                    "question": query, 
+                                    "chat_history": chat_history
+                                        },return_only_outputs=True)
         return result['answer'], result['source_documents']
         
     # load vector db from local
     def load_vector_db_from_local(self, path: str, index_name: str):
-        #self.vector_db = FAISS.load_local(path, embeddings, index_name)
-        self.vector_db = Chroma(persist_directory="./chroma_db", embedding_function=self.embeddings)
+        self.vector_db = FAISS.load_local(path, self.embeddings, index_name)
+        #self.vector_db = Chroma(persist_directory=path, embedding_function=self.embeddings)
         print(f"Loaded vector db from local: {path}/{index_name}")
 
     # save vector db to local
     def save_vector_db_to_local(self, path: str, index_name: str):
-        self.vector_db.persist()
-        #FAISS.save_local(self.vector_db, path, index_name)
+        #self.vector_db.persist(persist_directory=path)
+        FAISS.save_local(self.vector_db, path, index_name)
         print("Vector db saved to local")
 
     # split, embed and ingest
-    def init_vector_db_from_documents(self, path: str, file_list: List[str]):
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.chunk_size, 
-            chunk_overlap=self.chunk_overlap
-        )
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.chunk_size, 
-            chunk_overlap=self.chunk_overlap
-        )
+    def init_vector_db_from_documents(self, file_list: List[str]):
+        from langchain.text_splitter import RecursiveCharacterTextSplitter, PythonCodeTextSplitter, MarkdownTextSplitter, TextSplitter
+        from langchain.document_loaders import UnstructuredPowerPointLoader, UnstructuredWordDocumentLoader, PyPDFLoader, CSVLoader, PythonLoader, MWDumpLoader, UnstructuredMarkdownLoader, BSHTMLLoader
+        import os
+
+        text_splitter = RecursiveCharacterTextSplitter()
+        python_splitter = PythonCodeTextSplitter() 
+        md_splitter = MarkdownTextSplitter()
+       
 
         docs = []
         for file in file_list:
             print(f"Loading file: {file}")
             ext_name = os.path.splitext(file)[-1]
+            
             if ext_name == ".pptx":
                 loader = UnstructuredPowerPointLoader(file)
             elif ext_name == ".docx":
@@ -274,25 +274,39 @@ class DocChatbot:
             elif ext_name == ".pdf":
                 loader = PyPDFLoader(file)
             elif ext_name == ".csv":
-                loader = CSVLoader(file_path=file)
+                loader = CSVLoader(file_path=file) 
             elif ext_name == ".py":
                 loader = PythonLoader(file_path=file)
             elif ext_name == ".xml":
                 loader = MWDumpLoader(file_path=file, encoding="utf8")
+            elif ext_name == ".md":
+                loader = UnstructuredMarkdownLoader(file, mode="elements")
+            elif ext_name == ".html":
+                loader = BSHTMLLoader(file)
             else:
-                # process .txt, .html
-                loader = UnstructuredFileLoader(file)
-
-            doc = loader.load_and_split(text_splitter)            
-            docs.extend(doc)
-            print("Processed document: " + file)
-
+                raise ValueError(f"Unsupported extension: {ext_name}")
+                
+            loaded_docs = loader.load()
+            
+            if ext_name in [".pptx", ".docx", ".pdf", ".xml"]:
+                split_docs = text_splitter.split_documents(loaded_docs) 
+            elif ext_name == ".py":
+                split_docs = python_splitter.split_documents(loaded_docs)
+            elif ext_name == ".md":
+                split_docs = md_splitter.split_documents(loaded_docs) 
+            elif ext_name == ".html":
+                split_docs = text_splitter.split_documents(loaded_docs)
+                
+            docs.extend(split_docs)
+                
+        print(f"Loaded and split {len(docs)} documents")
         print("Generating embeddings and ingesting.")
-        self.vector_db = Chroma.from_documents(
-                docs, 
-                self.embeddings, 
-                persist_directory="./chroma_db"
-            )
+        self.vector_db = FAISS.from_documents(docs, self.embeddings)
+        #self.vector_db = Chroma.from_documents(
+         #       docs, 
+         #       self.embeddings, 
+         #       persist_directory=path
+         #   )
         print("Vector db initialized.")
 
     # Get indexes
